@@ -23,6 +23,7 @@ from django.utils import timezone as django_timezone
 from django.utils.encoding import smart_str
 from django.utils.translation import gettext_lazy as _
 
+from auditlog import settings as auditlog_settings
 from auditlog.diff import mask_str
 
 DEFAULT_OBJECT_REPR = "<error forming object repr>"
@@ -473,8 +474,13 @@ class LogEntry(models.Model):
                             )
                         else:
                             values_display.append(choices_dict.get(value, "None"))
-                    except Exception:
+                    except ValueError:
                         values_display.append(choices_dict.get(value, "None"))
+                    except Exception:
+                        if isinstance(value, list):
+                            values_display.append(", ".join(value))
+                        else:
+                            values_display.append(choices_dict.get(value, "None"))
             else:
                 try:
                     field_type = field.get_internal_type()
@@ -500,7 +506,7 @@ class LogEntry(models.Model):
                         value = self._get_changes_display_for_fk_field(field, value)
 
                     # check if length is longer than 140 and truncate with ellipsis
-                    if len(value) > 140:
+                    if auditlog_settings.ENABLE_ELLIPSIS and len(value) > 140:
                         value = f"{value[:140]}..."
 
                     values_display.append(value)
