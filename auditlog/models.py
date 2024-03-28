@@ -488,8 +488,31 @@ class LogEntry(models.Model):
                     # if the field is a relationship it has no internal type and exclude it
                     continue
                 for value in values:
+                    # handle case where field is a datetime range
+                    if field_type == "DateTimeRangeField":
+                        try:
+                            from psycopg2.extras import DateTimeTZRange
+                        except ImportError:
+                            pass
+                        else:
+                            if value not in [None, 'None'] and isinstance(value, str):
+                                value = value.strip('[]()').split(', ')
+                                if len(value) == 2:
+                                    try:
+                                        lower, upper = parser.parse(value[0]), parser.parse(value[1])
+                                        if lower:
+                                            if lower.tzinfo is None:
+                                                lower = lower.replace(tzinfo=timezone.utc)
+                                            lower = lower.astimezone(gettz(settings.TIME_ZONE))
+                                        if upper:
+                                            if upper.tzinfo is None:
+                                                upper = upper.replace(tzinfo=timezone.utc)
+                                            upper = upper.astimezone(gettz(settings.TIME_ZONE))
+                                        value = DateTimeTZRange(lower=formats.localize(lower), upper=formats.localize(upper))
+                                    except ValueError:
+                                        pass
                     # handle case where field is a datetime, date, or time type
-                    if field_type in ["DateTimeField", "DateField", "TimeField"]:
+                    elif field_type in ["DateTimeField", "DateField", "TimeField"]:
                         try:
                             value = parser.parse(value)
                             if field_type == "DateField":

@@ -1,10 +1,12 @@
+import decimal
 import json
 from datetime import timezone
 from typing import Optional
 
 from django.conf import settings
+from django.contrib.postgres.fields import DateTimeRangeField
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import NOT_PROVIDED, DateTimeField, ForeignKey, JSONField, Model
+from django.db.models import NOT_PROVIDED, DateTimeField, ForeignKey, JSONField, Model, DecimalField
 from django.utils import timezone as django_timezone
 from django.utils.encoding import smart_str
 
@@ -63,6 +65,12 @@ def get_field_value(obj, field):
     :rtype: str
     """
     try:
+        try:
+            from psycopg2.extras import DateTimeTZRange
+            datetime_range_available = True
+        except ImportError:
+            datetime_range_available = False
+
         if isinstance(field, DateTimeField):
             # DateTimeFields are timezone-aware, so we need to convert the field
             # to its naive form before we can accurately compare them for changes.
@@ -73,9 +81,25 @@ def get_field_value(obj, field):
                 and not django_timezone.is_naive(value)
             ):
                 value = django_timezone.make_naive(value, timezone=timezone.utc)
+        elif datetime_range_available and isinstance(field, DateTimeRangeField):
+            # DateTimeRangeFields are timezone-aware, so we need to convert the field
+            # to its naive form before we can accurately compare them for changes.
+            value = field.to_python(getattr(obj, field.name, None))
+            if value is not None:
+                lower = value.lower
+                upper = value.upper
+                if lower is not None and settings.USE_TZ and not django_timezone.is_naive(lower):
+                    lower = django_timezone.make_naive(lower, timezone=timezone.utc)
+                if upper is not None and settings.USE_TZ and not not django_timezone.is_naive(upper):
+                    upper = django_timezone.make_naive(upper, timezone=timezone.utc)
+                value = smart_str(DateTimeTZRange(lower=lower, upper=upper))
         elif isinstance(field, JSONField):
             value = field.to_python(getattr(obj, field.name, None))
             value = json.dumps(value, sort_keys=True, cls=field.encoder)
+        elif isinstance(field, DecimalField):
+            value = field.to_python(getattr(obj, field.name, None))
+            if value is not None:
+                value = decimal.Decimal('{:.{}f}'.format(value, field.decimal_places))
         elif (field.one_to_one or field.many_to_one) and hasattr(field, "rel_class"):
             value = smart_str(
                 getattr(obj, field.get_attname(), None), strings_only=True
