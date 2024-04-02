@@ -90,7 +90,7 @@ def get_field_value(obj, field):
                 upper = value.upper
                 if lower is not None and settings.USE_TZ and not django_timezone.is_naive(lower):
                     lower = django_timezone.make_naive(lower, timezone=timezone.utc)
-                if upper is not None and settings.USE_TZ and not not django_timezone.is_naive(upper):
+                if upper is not None and settings.USE_TZ and not django_timezone.is_naive(upper):
                     upper = django_timezone.make_naive(upper, timezone=timezone.utc)
                 value = smart_str(DateTimeTZRange(lower=lower, upper=upper))
         elif isinstance(field, JSONField):
